@@ -2,18 +2,61 @@
 
 **Version:** 1.0  
 **Last Updated:** October 24, 2025  
-**Status:** Planning & Architecture Phase
-
+**Status:** Phase 0: MVP Development - Task Breakdown Complete
 ---
 
 ## Table of Contents
 
 1. [Introduction](#introduction)
 2. [Section 1: Full Vision](#section-1-full-vision)
-3. [Section 2: Minimum Viable Product (MVP)](#section-2-minimum-viable-product-mvp)
-4. [Section 3: High-Level Architecture](#section-3-high-level-architecture)
-5. [Section 4: Build Phases](#section-4-build-phases)
-6. [Appendix](#appendix)
+
+3. [Development Progress Tracking](#development-progress-tracking)
+4. [Section 2: Minimum Viable Product (MVP)](#section-2-minimum-viable-product-mvp)
+5. [Section 3: High-Level Architecture](#section-3-high-level-architecture)
+6. [Section 4: Build Phases](#section-4-build-phases)
+7. [Appendix](#appendix)
+
+## Development Progress Tracking
+
+**Note:** This section serves as a living record of our development journey, tracking milestones, decisions, and progress as we build the Daemon platform.
+
+### Current Status
+- **Phase:** Phase 0 - MVP Development
+- **Stage:** Task Breakdown Complete, Ready for Implementation
+- **Last Updated:** October 24, 2025
+
+### Milestones Achieved
+✅ **October 24, 2025**
+- Repository created (daemon-platform)
+- BUILD_MANUAL.md established with complete vision, MVP definition, architecture, and phased roadmap
+- Development team established: Human (oversight & decisions), Comet (implementation & automation), Gemini (AI expertise & architecture)
+- Collaboration model defined: Lockstep development with continuous documentation
+- Phase 0 detailed task breakdown completed (7 major components)
+
+### Ongoing Work
+🔄 **Phase 0 Implementation Preparation**
+- Awaiting user approval to begin GCP Project Setup
+- Ready to initialize development environment
+
+### Key Decisions Made
+- **Repository Visibility:** Private during development phase
+- **Development Approach:** MVP-first (Phase 0 complete before Phase 1)
+- **Documentation Strategy:** BUILD_MANUAL.md as living document with continuous updates
+- **Team Workflow:** Comet ↔ Gemini collaboration with user as human-in-the-loop
+
+### Issues & Resolutions
+*No issues encountered yet. This section will track any challenges faced during development and their solutions.*
+
+### Next Steps
+1. Get user approval for GCP Project Setup
+2. Create GCP project and enable necessary APIs
+3. Set up billing and IAM roles
+4. Begin Backend API development (FastAPI)
+
+4. [Section 2: Minimum Viable Product (MVP)](#section-2-minimum-viable-product-mvp)
+5. [Section 3: High-Level Architecture](#section-3-high-level-architecture)
+6. [Section 4: Build Phases](#section-4-build-phases)
+7. [Appendix](#appendix)
 
 ---
 
@@ -289,7 +332,89 @@ This roadmap outlines how to incrementally build Daemon from MVP to full vision.
 - Shared Cloud Run service executes code
 - Display webhook URL and basic success/failure status
 
-**Outcome:** Successfully demonstrate that hitting a generated webhook URL results in a Slack message. **Core concept validated.**
+**Outcome:** Successfully demonstrate that hitting a generated webhook URL results in a Slack message. **Core concept validated.*
+
+**Detailed Implementation Tasks:**
+
+**1. GCP Project Setup**
+- Create new GCP project for Daemon
+- Enable required APIs: Cloud Run, Cloud Functions, Pub/Sub, Firestore, Secret Manager, Cloud Storage, Vertex AI
+- Set up billing account and enable billing for project
+- Configure IAM roles and service accounts
+- Set up Cloud Build for CI/CD
+
+**2. Backend API (Control Plane)**
+- Initialize FastAPI project structure
+- Implement `/chat` endpoint for user interaction
+  - Integrate with Vertex AI (Gemini) for natural language processing
+  - Parse user intent and extract workflow parameters
+- Implement `/save-credential` endpoint
+  - Securely store credentials in Secret Manager
+  - Validate credential format and permissions
+- Implement `/deploy-workflow` endpoint
+  - Generate Python code using AI based on user description
+  - Save code to Cloud Storage
+  - Create API Gateway webhook endpoint
+  - Configure Cloud Run service
+  - Set up Pub/Sub trigger connection
+- Containerize API with Docker
+- Deploy to Cloud Run with appropriate scaling configuration
+
+**3. Daemon SDK (Minimal Python Library)**
+- Create Python package structure
+- Implement core SDK functions:
+  - `sdk.triggers.get_data()` - Access trigger payload
+  - `sdk.secrets.get(key)` - Retrieve secrets from Secret Manager
+  - `sdk.log.info()` / `sdk.log.error()` - Structured logging
+  - Optional: `sdk.storage.save()` / `sdk.storage.load()` - GCS access
+- Package and publish to private/local PyPI or include in deployments
+- Write basic SDK documentation
+
+**4. Execution Worker (Data Plane)**
+- Create Cloud Run service template
+- Implement Pub/Sub message handler
+- Set up code fetching from Cloud Storage
+- Implement Python code execution environment
+- Add error handling and logging
+- Configure service to receive Pub/Sub messages
+- Test with sample workflows
+
+**5. Webhook Receiver (Trigger System)**
+- Set up API Gateway
+- Configure webhook endpoint routes
+- Implement webhook-to-Pub/Sub bridge
+- Add request validation and authentication
+- Generate unique webhook URLs per workflow
+- Test webhook reception and message publishing
+
+**6. Frontend UI (Basic)**
+- Create simple HTML/React application
+- Implement chat interface component
+  - Text input for workflow description
+  - Message history display
+  - AI response rendering
+- Implement credential input form
+  - Slack Bot Token field
+  - Secure submission to backend
+- Implement deploy button
+  - Trigger workflow deployment
+  - Display webhook URL after deployment
+- Add basic success/failure status display
+- Containerize and deploy to Cloud Run
+
+**7. End-to-End Testing**
+- Manual test workflow:
+  1. User describes workflow: "When webhook is triggered, send message to Slack"
+  2. User provides Slack Bot Token
+  3. User clicks Deploy
+  4. System generates code, creates webhook, configures Cloud Run
+  5. User receives webhook URL
+  6. User triggers webhook via curl/Postman
+  7. Verify Slack message is sent
+- Document test results and any issues
+- Validate webhook URL accessibility
+- Confirm logs appear in Cloud Logging
+- Verify credential security (not exposed in logs or code)*
 
 ---
 
