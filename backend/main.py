@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 import uvicorn
 import google.cloud.logging
 import logging
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
 # --- Logging Setup ---
 # Set up Google Cloud Logging if running in GCP, otherwise use basic logging
@@ -26,6 +28,14 @@ GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "your-gcp-project-id")  # Repl
 GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "your-daemon-code-bucket")  # Replace default or set env
 SECRET_MANAGER_SLACK_SECRET_NAME = "daemon-mvp-slack-token"  # Name of the secret to store Slack token in Secret Manager
 # Add other config like Pub/Sub topics later
+
+# Initialize Vertex AI
+try:
+    vertexai.init(project=GCP_PROJECT_ID, location="us-east1")
+    logging.info("Vertex AI initialized successfully.")
+except Exception as e:
+    logging.error(f"Failed to initialize Vertex AI: {e}")
+    # Continue without Vertex AI - endpoints will handle gracefully
 
 
 # --- Pydantic Models for Request/Response ---
@@ -83,10 +93,44 @@ async def generate_workflow(request: GenerateWorkflowRequest):
     """
     logging.info(f"Generate workflow request received with prompt: {request.prompt[:50]}...")
     
-    # TODO: Implement actual AI call to Gemini/Vertex AI
-    # For MVP, return a placeholder
-    generated_code = '# Placeholder generated code\\nprint("Hello from Daemon")'
-    workflow_id = "wf-placeholder-123"
+
+    try:        model = GenerativeModel("gemini-1.5-flash")
+        # Initialize Gemini 1.5 Flash model        # Build the prompt with role and context
+        system_prompt = (
+            "You are an expert Python developer creating automation scripts for the Daemon platform. "
+            "Your task is to generate clean, production-ready Python code based on the user's request. "
+            "\n\nAvailable SDK functions you can use:"
+            "\n- get_trigger_data(): Returns the data that triggered this workflow"
+            "\n- get_secret(secret_name): Retrieves a secret from Secret Manager"
+            "\n- post_slack_message(message): Posts a message to Slack"
+            "\n\nGenerate ONLY the Python code without any markdown formatting or explanation."
+        )
+        
+        full_prompt = f"{system_prompt}\n\nUser Request: {request.prompt}"
+        
+        # Generate code with low temperature for consistency
+        response = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.1,
+                "top_p": 0.95,
+                "max_output_tokens": 2048,
+            }
+        )
+        
+        generated_code = response.text.strip()
+        
+        # Generate a simple workflow ID (in production, use UUID)
+        import hashlib
+        workflow_id = f"wf-{hashlib.md5(request.prompt.encode()).hexdigest()[:12]}"
+        
+        logging.info(f"Successfully generated workflow code for prompt: {request.prompt[:50]}...")
+    except Exception as e:
+        logging.error(f"Error generating workflow code: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate workflow: {str(e)}"
+        )
     
     return GenerateWorkflowResponse(
         generated_code=generated_code,
