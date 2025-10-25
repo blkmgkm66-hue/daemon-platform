@@ -9,6 +9,7 @@ import google.cloud.logging
 import logging
 import vertexai
 from vertexai.generative_models import GenerativeModel
+from google.cloud import secretmanager
 
 # --- Logging Setup ---
 # Set up Google Cloud Logging if running in GCP, otherwise use basic logging
@@ -145,11 +146,69 @@ async def save_credential(request: SaveCredentialRequest):
     """
     logging.info(f"Save credential request for: {request.credential_name}")
     
-    # TODO: Implement Secret Manager integration
-    # For MVP, return a placeholder
-    secret_version_id = "secret-version-placeholder-456"
+    # Initialize Secret Manager client
+    sm_client = secretmanager.SecretManagerServiceClient()
     
-    return SaveCredentialResponse(
+    # Use fixed secret name for MVP
+    secret_id = SECRET_MANAGER_SLACK_SECRET_NAME
+    project_path = f"projects/{GCP_PROJECT_ID}"
+    secret_path = f"{project_path}/secrets/{secret_id}"
+    
+    try:
+        # Try to add a new version to existing secret
+        payload_bytes = request.secret_value.encode('UTF-8')
+        parent = secret_path
+        payload = {'data': payload_bytes}
+        
+        response = sm_client.add_secret_version(
+            request={"parent": parent, "payload": payload}
+        )
+        secret_version_id = response.name.split("/")[-1]
+        
+        logging.info(f"Added new version {secret_version_id} to secret {secret_id}")
+        
+    except Exception as e:
+        # If secret doesn't exist (NotFound), create it first
+        if "NOT_FOUND" in str(e) or "not found" in str(e).lower():
+            logging.info(f"Secret {secret_id} not found, creating it...")
+            
+            try:
+                # Create the secret
+                secret = sm_client.create_secret(
+                    request={
+                        "parent": project_path,
+                        "secret_id": secret_id,
+                        "secret": {
+                            "replication": {"automatic": {}},
+                        },
+                    }
+                )
+                logging.info(f"Created secret: {secret.name}")
+                
+                # Now add the first version
+                payload_bytes = request.secret_value.encode('UTF-8')
+                payload = {'data': payload_bytes}
+                
+                response = sm_client.add_secret_version(
+                    request={"parent": secret.name, "payload": payload}
+                )
+                secret_version_id = response.name.split("/")[-1]
+                
+                logging.info(f"Added first version {secret_version_id} to new secret {secret_id}")
+                
+            except Exception as create_error:
+                logging.error(f"Error creating secret: {create_error}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create secret: {str(create_error)}"
+                )
+        else:
+            # Some other error occurred
+            logging.error(f"Error adding secret version: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save credential: {str(e)}"
+            )    return SaveCredentialResponse(
         message="Credential saved successfully.",
         secret_version_id=secret_version_id
     )
