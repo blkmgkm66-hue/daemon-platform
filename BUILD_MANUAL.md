@@ -10,18 +10,10 @@
 2. [Section 1: Full Vision](#section-1-full-vision)
 
 3. [Development Progress Tracking](#development-progress-tracking)
-4. [Section 2: Minimum Viable Product (MVP)](#section-2-minimum-viable-product-mvp)
-5. [Section 3: High-Level Architecture](#section-3-high-level-architecture)
-6. [Section 4: Build Phases](#section-4-build-phases)
-7. [Appendix](#appendix)
-
-## Development Progress Tracking
-
-**Note:** This section serves as a living record of our development journey, tracking milestones, decisions, and progress as we build the Daemon platform.
-
-### Current Status
-- **Phase:** Phase 0 - MVP Development
-- **Stage:** Infrastructure Setup Complete, Ready for Backend Development
+3. [Section 3: High-Level Architecture](#section-3-high-level-architecture)
+4. [Testing Strategy](#testing-strategy)
+5. [Section 4: Build Phases](#section-4-build-phases)
+6. [Appendix](#appendix)
 - - **Last Updated:** October 25, 2025
   - 🔄 **Backend API Development - In Progress**
   - - Backend scaffolding complete (endpoints defined, Pydantic models created)
@@ -72,6 +64,193 @@
 2. **Configure IAM roles and service accounts** - Set up least-privilege access for Cloud Run workers
 3. **Initialize Backend API** - Create FastAPI project structure with initial endpoints
 4. **Document architecture decisions** - Add infrastructure choices to BUILD_MANUAL.md](url)](url)](url)](url)p
+
+## Testing Strategy
+
+### Overview
+
+This section defines our testing approach for the Daemon Platform MVP. Based on consultation with Gemini, we follow a **simplified incremental testing strategy** that balances thorough validation with MVP speed and cost-effectiveness.
+
+### Core Testing Philosophy
+
+**Build & Test Incrementally:**
+- Test each component as we build it
+- Use real GCP services (no mocking) to validate actual integrations
+- Catch bugs early while code is fresh in mind
+- Keep costs minimal by leveraging GCP free tiers
+
+**Final Manual Validation:**
+- Deploy everything to Cloud Run
+- Perform one comprehensive end-to-end test
+- Use Cloud Logging for debugging
+
+### Testing Tools & Setup
+
+**Required Tools:**
+- `pytest`: Python testing framework
+- `FastAPI TestClient`: Built-in tool for testing FastAPI endpoints locally (no server needed)
+- `gcloud CLI`: For local authentication to GCP services
+
+**Local Authentication:**
+```bash
+gcloud auth application-default login
+```
+This command authenticates your local environment to GCP, allowing local tests to access real GCP services.
+
+### Testing Each Component
+
+#### 1. Testing `/generate-workflow` Endpoint (Vertex AI)
+
+**Approach:** Test against the **real** Vertex AI service locally
+
+**Why:** Validates prompt construction, API integration, and response handling without deploying the backend first.
+
+**Cost:** Minimal - each test call costs fractions of a cent
+
+**Test Script Location:** `backend/tests/test_generate_workflow.py`
+
+**What to Test:**
+- Endpoint responds with 200 status code
+- Generated code is valid Python
+- Workflow ID is generated correctly
+- Error handling works (invalid prompts, API failures)
+- Temperature and prompt engineering produce consistent results
+
+**Example Test:**
+```python
+from fastapi.testclient import TestClient
+from backend.main import app
+
+client = TestClient(app)
+
+def test_generate_workflow():
+    response = client.post("/generate-workflow", json={
+        "prompt": "Create a workflow that posts 'Hello World' to Slack"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert "generated_code" in data
+    assert "workflow_id" in data
+    assert len(data["generated_code"]) > 0
+```
+
+#### 2. Testing `/save-credential` Endpoint (Secret Manager)
+
+**Approach:** Test against the **real** Secret Manager service locally
+
+**Why:** Validates secret creation, versioning, and IAM integration
+
+**Cost:** Free - Secret Manager offers 10,000 free operations/month
+
+**Test Script Location:** `backend/tests/test_save_credential.py`
+
+**What to Test:**
+- Secret is created successfully
+- Secret version ID is returned
+- Error handling works (duplicate secrets, invalid names)
+- IAM permissions are correct
+
+**Cleanup:** Delete test secrets after tests complete to avoid clutter
+
+#### 3. Testing `/deploy-workflow` Endpoint (Cloud Run/Functions)
+
+**Approach:** Test against **real** GCP deployment services locally
+
+**Why:** Validates code packaging, deployment logic, and webhook URL generation
+
+**Cost:** Minimal - Cloud Run free tier covers testing
+
+**Test Script Location:** `backend/tests/test_deploy_workflow.py`
+
+**What to Test:**
+- Workflow code is packaged correctly
+- Deployment succeeds and returns webhook URL
+- Error handling works (invalid code, deployment failures)
+- IAM permissions for Cloud Run service account
+
+**Cleanup:** Delete test deployments after tests complete
+
+### End-to-End Testing
+
+**After MVP completion:**
+
+1. **Deploy Backend API to Cloud Run**
+   - Verify deployment succeeds
+   - Check IAM permissions (Vertex AI, Secret Manager, deployment access)
+   - Test health check endpoint
+
+2. **Manual Test Flow:**
+   - Use `curl` or Postman to call `/generate-workflow`
+   - Save Slack token with `/save-credential`
+   - Deploy workflow with `/deploy-workflow`
+   - Trigger the deployed webhook
+   - Verify Slack message appears
+
+3. **Debugging:**
+   - Use Cloud Logging to view logs from all components
+   - Check for errors in Backend API, deployed workflows, Vertex AI calls
+
+### Test Organization
+
+**Directory Structure:**
+```
+backend/
+├── main.py
+├── requirements.txt
+├── tests/
+│   ├── __init__.py
+│   ├── test_generate_workflow.py
+│   ├── test_save_credential.py
+│   └── test_deploy_workflow.py
+```
+
+### Running Tests
+
+**Install Test Dependencies:**
+```bash
+cd backend
+pip install pytest
+```
+
+**Run All Tests:**
+```bash
+pytest tests/ -v
+```
+
+**Run Single Test:**
+```bash
+pytest tests/test_generate_workflow.py -v
+```
+
+### Cost Management
+
+**Expected Testing Costs (per test run):**
+- Vertex AI calls: ~$0.01-0.05 total
+- Secret Manager: Free (within 10k operations/month)
+- Cloud Run deployments: Free (within free tier)
+- **Total: ~$0.05-0.10 per full test suite run**
+
+**Budget-Friendly Practices:**
+- Run tests selectively during development
+- Clean up test resources after each run
+- Use Cloud Logging (free) instead of extensive error reproduction
+- Leverage GCP's free tiers for all services
+
+### Testing Milestones
+
+- [ ] **Milestone 1:** `/generate-workflow` endpoint tested and validated
+- [ ] **Milestone 2:** `/save-credential` endpoint tested and validated
+- [ ] **Milestone 3:** `/deploy-workflow` endpoint tested and validated  
+- [ ] **Milestone 4:** Backend API deployed to Cloud Run
+- [ ] **Milestone 5:** End-to-end flow tested successfully
+
+### Key Takeaways from Gemini Consultation
+
+1. **Incremental testing catches bugs early** - waiting until everything is assembled makes debugging extremely slow
+2. **Local testing with real services validates actual integrations** - provides confidence without deployment overhead
+3. **GCP free tiers cover MVP testing costs** - Secret Manager (10k ops), Cloud Run (2M requests), Vertex AI (minimal cost)
+4. **Manual end-to-end test is sufficient for MVP** - automated E2E can be added in Phase 1
+5. **Cloud Logging is invaluable for debugging** - structured logs help diagnose issues quickly
 5. **Validate MVP deployment** - Test the complete workflow end-to-end3. Set up billing and IAM roles
 4. Begin Backend API development (FastAPI)
 
