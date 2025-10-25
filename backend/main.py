@@ -94,7 +94,7 @@ async def generate_workflow(request: GenerateWorkflowRequest):
     logging.info(f"Generate workflow request received with prompt: {request.prompt[:50]}...")
     
 
-    try:        model = GenerativeModel("gemini-1.5-flash")
+    try:        model = GenerativeModel("gemini-2.5-flash")
         # Initialize Gemini 1.5 Flash model        # Build the prompt with role and context
         system_prompt = (
             "You are an expert Python developer creating automation scripts for the Daemon platform. "
