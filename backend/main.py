@@ -10,6 +10,8 @@ import logging
 import vertexai
 from vertexai.generative_models import GenerativeModel
 from google.cloud import secretmanager
+from google.cloud import storage
+from google.cloud import firestore
 
 # --- Logging Setup ---
 # Set up Google Cloud Logging if running in GCP, otherwise use basic logging
@@ -221,10 +223,46 @@ async def deploy_workflow(request: DeployWorkflowRequest):
     """
     logging.info(f"Deploy workflow request for workflow_id: {request.workflow_id}")
     
-    # TODO: Implement deployment to Cloud Run/Functions + API Gateway webhook setup
-    # For MVP, return a placeholder
-    webhook_url = f"https://daemon-webhook-placeholder.run.app/trigger/{request.workflow_id}"
-    
+    try:
+        # Initialize GCS client
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(GCS_BUCKET_NAME)
+        
+        # Save generated code to GCS
+        # Path format: gs://BUCKET_NAME/{workflow_id}/main.py
+        code_path = f"{request.workflow_id}/main.py"
+        blob = bucket.blob(code_path)
+        blob.upload_from_string(request.generated_code, content_type='text/x-python')
+        
+        logging.info(f"Saved workflow code to gs://{GCS_BUCKET_NAME}/{code_path}")
+        
+        # Initialize Firestore client
+        db = firestore.Client()
+        
+        # Construct API Gateway webhook URL (manually configured for MVP)
+        # Format: https://your-api-gateway-url/invoke/{workflow_id}
+        # TODO: Replace with actual API Gateway URL after manual setup
+        webhook_url = f"https://daemon-webhook-placeholder-run.app/trigger/{request.workflow_id}"
+        
+        # Save workflow metadata to Firestore
+        workflow_doc = db.collection('workflows').document(request.workflow_id)
+        workflow_doc.set({
+            'workflow_id': request.workflow_id,
+            'code_path': f"gs://{GCS_BUCKET_NAME}/{code_path}",
+            'webhook_url': webhook_url,
+            'created_at': firestore.SERVER_TIMESTAMP,
+            'status': 'deployed'
+        })
+        
+        logging.info(f"Saved workflow metadata to Firestore for {request.workflow_id}")
+        logging.info(f"Webhook URL: {webhook_url}")
+        
+    except Exception as e:
+        logging.error(f"Error deploying workflow: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deploy workflow: {str(e)}"
+        )
     return DeployWorkflowResponse(
         message="Workflow deployed successfully.",
         webhook_url=webhook_url
