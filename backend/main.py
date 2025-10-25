@@ -31,7 +31,7 @@ SECRET_MANAGER_SLACK_SECRET_NAME = "daemon-mvp-slack-token"  # Name of the secre
 
 # Initialize Vertex AI
 try:
-    vertexai.init(project=GCP_PROJECT_ID, location="us-east1")
+    vertexai.init(project=GCP_PROJECT_ID, location="us-central1")
     logging.info("Vertex AI initialized successfully.")
 except Exception as e:
     logging.error(f"Failed to initialize Vertex AI: {e}")
